@@ -1,7 +1,7 @@
 #include <Adafruit_NeoPixel.h>
 
-#define LED_PIN     2
-#define NUM_LEDS    69
+#define LED_PIN 2
+#define NUM_LEDS 69
 
 #define RING_45_END 44
 #define RING_12_1_START 45
@@ -28,24 +28,32 @@ void loop() {
     lastPatternChange = now;
   }
 
-switch (currentPattern) {
-  case 0:
-    rotatingDotTail45();
-    pulseSync12s();
-    break;
-  case 1:
-    sparkleFade45();
-    mirroredWave12s();
-    break;
-  case 2:
-    breatheRing45();
-    breatheSync12s();
-    break;
-  case 3:
-    multiDotRotate45();
-    rotatingDot12s();
-    break;
-}
+  switch (currentPattern) {
+    case 0:
+      rotatingDotTail45();
+      rotatingDot12s();
+      break;
+    case 1:
+      sparkleFade45();
+      mirroredWave12s();
+      break;
+    case 2:
+      breatheRing45();
+      breatheSync12s();
+      break;
+    case 3:
+      multiDotRotate45();
+      multiRotatingDot12s();
+      break;
+    case 4:
+      pulseSync12s();
+      breatheRing45();
+      break;
+    case 5:
+      multi2Rotate45();
+      multi2Rotate12s();
+      break;
+  }
 
 
   strip.show();
@@ -98,7 +106,7 @@ void breatheRing45() {
 
 void multiDotRotate45() {
   static int pos = 0;
-  const int tailLength = 4;
+  const int tailLength = 6;
   const int spacing = 11;  // ~90° spacing on 45 LEDs
 
   int dots[] = {
@@ -106,6 +114,31 @@ void multiDotRotate45() {
     (pos + spacing) % 45,
     (pos + 2 * spacing) % 45,
     (pos + 3 * spacing) % 45
+  };
+
+  for (int i = 0; i <= RING_45_END; i++) {
+    strip.setPixelColor(i, 0);  // Clear
+  }
+
+  for (int d = 0; d < 4; d++) {
+    for (int t = 0; t < tailLength; t++) {
+      int index = (dots[d] - t + 45) % 45;
+      uint8_t brightness = 255 - (t * (255 / tailLength));
+      strip.setPixelColor(index, lightBlue(brightness));
+    }
+  }
+
+  pos = (pos + 1) % 45;
+}
+
+void multi2Rotate45() {
+  static int pos = 0;
+  const int tailLength = 6;
+  const int spacing = 22;  // ~180° spacing on 45 LEDs
+
+  int dots[] = {
+    pos,
+    (pos + spacing) % 45,
   };
 
   for (int i = 0; i <= RING_45_END; i++) {
@@ -184,4 +217,58 @@ void rotatingDot12s() {
   }
 
   pos = (pos + 1) % 12;
+}
+
+void multi2Rotate12s() {
+  static int pos = 0;
+  const int tailLength = 3;
+  const int spacing = 6;  // ~180° spacing on 12 LEDs
+
+  int dots[] = {
+    pos,
+    (pos + spacing) % 45,
+  };
+
+  for (int i = 0; i < 12; i++) {
+    strip.setPixelColor(RING_12_1_START + i, 0);
+    strip.setPixelColor(RING_12_2_START + i, 0);
+  }
+
+  for (int d = 0; d < 4; d++) {
+    for (int t = 0; t < tailLength; t++) {
+      int index = (dots[d] - t + 45) % 45;
+      uint8_t brightness = 255 - (t * (255 / tailLength));
+      strip.setPixelColor(index, lightBlue(brightness));
+    }
+  }
+
+  pos = (pos + 1) % 45;
+}
+
+void multiRotatingDot12s() {
+  static int pos = 0;
+  const int tailLength = 1;
+  const int spacing = 3;  // ~90° spacing on 12 LEDs
+
+  int dots[] = {
+    pos,
+    (pos + spacing) % 45,
+    (pos + 2 * spacing) % 45,
+    (pos + 3 * spacing) % 45
+  };
+
+  for (int i = 0; i < 12; i++) {
+    strip.setPixelColor(RING_12_1_START + i, 0);
+    strip.setPixelColor(RING_12_2_START + i, 0);
+  }
+
+  for (int d = 0; d < 4; d++) {
+    for (int t = 0; t < tailLength; t++) {
+      int index = (dots[d] - t + 12) % 12;
+      uint8_t brightness = 255 - (t * (255 / tailLength));
+      strip.setPixelColor(index, lightBlue(brightness));
+    }
+  }
+
+  pos = (pos + 1) % 45;
 }
