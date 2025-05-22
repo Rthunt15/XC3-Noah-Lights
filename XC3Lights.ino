@@ -1,99 +1,187 @@
-#include <FastLED.h>
+#include <Adafruit_NeoPixel.h>
 
-#define DATA_PIN 2
-#define NUM_LEDS 69  // 45 + 12 + 12
-#define COLOR_ORDER GRB
-#define LED_TYPE WS2812B
+#define LED_PIN     2
+#define NUM_LEDS    69
 
-#define RING45_START 0
-#define RING45_COUNT 45
-#define RING12A_START 45
-#define RING12B_START 57
-#define RING12_COUNT 12
+#define RING_45_END 44
+#define RING_12_1_START 45
+#define RING_12_2_START 57
 
-CRGB leds[NUM_LEDS];
+#define PATTERN_DURATION 120000  // 2 minutes
+
+Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 unsigned long lastPatternChange = 0;
-const unsigned long patternInterval = 120000; // 2 minutes
-uint8_t currentPattern = 0;
+int currentPattern = 0;
+const int totalPatterns = 4;
+
 
 void setup() {
-  FastLED.addLeds<LED_TYPE, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS);
-  FastLED.setBrightness(100);
+  strip.begin();
+  strip.show();
 }
 
 void loop() {
-  if (millis() - lastPatternChange > patternInterval) {
-    currentPattern = (currentPattern + 1) % 5; // Number of pattern sets
-    lastPatternChange = millis();
+  unsigned long now = millis();
+  if (now - lastPatternChange > PATTERN_DURATION) {
+    currentPattern = (currentPattern + 1) % totalPatterns;
+    lastPatternChange = now;
   }
 
-  switch (currentPattern) {
-    case 0: rainbow45_pulse12(); break;
-    case 1: swirl45_mirror12(); break;
-    case 2: flashSyncAll(); break;
-    case 3: wave45_inSync12(); break;
-    case 4: sparkle45_mirrorChase12(); break;
+switch (currentPattern) {
+  case 0:
+    rotatingDotTail45();
+    pulseSync12s();
+    break;
+  case 1:
+    sparkleFade45();
+    mirroredWave12s();
+    break;
+  case 2:
+    breatheRing45();
+    breatheSync12s();
+    break;
+  case 3:
+    multiDotRotate45();
+    rotatingDot12s();
+    break;
+}
+
+
+  strip.show();
+  delay(20);
+}
+
+// ------------ Core color ---------------
+uint32_t lightBlue(uint8_t brightness) {
+  return strip.Color(0, (brightness * 100) / 255, brightness);
+}
+
+// ------------ 45 LED Ring Patterns ------------
+
+void rotatingDotTail45() {
+  static int pos = 0;
+  const int tailLength = 6;
+
+  for (int i = 0; i <= RING_45_END; i++) {
+    int distance = (i - pos + NUM_LEDS) % (RING_45_END + 1);
+    if (distance < tailLength) {
+      uint8_t brightness = 255 - (distance * (255 / tailLength));
+      strip.setPixelColor(i, lightBlue(brightness));
+    } else {
+      strip.setPixelColor(i, 0);
+    }
   }
 
-  FastLED.show();
-  delay(30); // adjust for effect speed
+  pos = (pos + 1) % (RING_45_END + 1);
 }
 
-// --- Pattern Definitions ---
-
-void rainbow45_pulse12() {
-  static uint8_t hue = 0;
-  fill_rainbow(&leds[RING45_START], RING45_COUNT, hue++, 3);
-
-  uint8_t brightness = beatsin8(30, 50, 255);
-  fill_solid(&leds[RING12A_START], RING12_COUNT, CHSV(hue, 255, brightness));
-  fill_solid(&leds[RING12B_START], RING12_COUNT, CHSV(hue, 255, brightness));
+void sparkleFade45() {
+  for (int i = 0; i <= RING_45_END; i++) {
+    uint8_t brightness = (random(15) == 0) ? 255 : random(10);
+    strip.setPixelColor(i, lightBlue(brightness));
+  }
 }
 
-void swirl45_mirror12() {
-  static uint8_t pos = 0;
-  fadeToBlackBy(leds, NUM_LEDS, 20);
-  leds[(RING45_START + pos) % RING45_COUNT] = CHSV(pos * 5, 255, 255);
-  
-  // Mirror effect on 12-rings
-  uint8_t index = pos % RING12_COUNT;
-  leds[RING12A_START + index] = CHSV(pos * 7, 255, 255);
-  leds[RING12B_START + (RING12_COUNT - 1 - index)] = CHSV(pos * 7, 255, 255);
-  
-  pos++;
+void breatheRing45() {
+  static float brightness = 0;
+  static int direction = 1;
+
+  brightness += 0.02f * direction;
+  if (brightness >= 1.0 || brightness <= 0.1) direction *= -1;
+
+  uint8_t b = (uint8_t)(brightness * 255);
+  for (int i = 0; i <= RING_45_END; i++) {
+    strip.setPixelColor(i, lightBlue(b));
+  }
 }
 
-void flashSyncAll() {
-  uint8_t flashHue = millis() / 10;
-  CRGB color = CHSV(flashHue, 255, (millis() / 500) % 2 == 0 ? 255 : 0);
-  fill_solid(leds, NUM_LEDS, color);
-}
+void multiDotRotate45() {
+  static int pos = 0;
+  const int tailLength = 4;
+  const int spacing = 11;  // ~90° spacing on 45 LEDs
 
-void wave45_inSync12() {
-  static uint8_t wavePos = 0;
-  for (int i = 0; i < RING45_COUNT; i++) {
-    leds[RING45_START + i] = CHSV(160, 255, sin8((i * 10) + wavePos));
+  int dots[] = {
+    pos,
+    (pos + spacing) % 45,
+    (pos + 2 * spacing) % 45,
+    (pos + 3 * spacing) % 45
+  };
+
+  for (int i = 0; i <= RING_45_END; i++) {
+    strip.setPixelColor(i, 0);  // Clear
   }
 
-  for (int i = 0; i < RING12_COUNT; i++) {
-    uint8_t val = sin8((i * 20) + wavePos);
-    leds[RING12A_START + i] = CHSV(0, 255, val);
-    leds[RING12B_START + i] = CHSV(0, 255, val);
+  for (int d = 0; d < 4; d++) {
+    for (int t = 0; t < tailLength; t++) {
+      int index = (dots[d] - t + 45) % 45;
+      uint8_t brightness = 255 - (t * (255 / tailLength));
+      strip.setPixelColor(index, lightBlue(brightness));
+    }
   }
+
+  pos = (pos + 1) % 45;
+}
+// ------------ 12 LED Rings ------------
+
+void pulseSync12s() {
+  static float brightness = 0;
+  static int direction = 1;
+
+  brightness += 0.03f * direction;
+  if (brightness >= 1.0 || brightness <= 0.2) direction *= -1;
+
+  uint8_t b = (uint8_t)(brightness * 255);
+  for (int i = 0; i < 12; i++) {
+    strip.setPixelColor(RING_12_1_START + i, lightBlue(b));
+    strip.setPixelColor(RING_12_2_START + i, lightBlue(b));
+  }
+}
+
+void mirroredWave12s() {
+  static int wavePos = 0;
+  const float speed = 0.5;
+
+  for (int i = 0; i < 12; i++) {
+    int phase = (int)(128 + 127 * sin((i + wavePos) * speed));
+    uint8_t b = (uint8_t)((phase * 255) / 255);
+    strip.setPixelColor(RING_12_1_START + i, lightBlue(b));
+    strip.setPixelColor(RING_12_2_START + (11 - i), lightBlue(b));
+  }
+
   wavePos++;
 }
 
-void sparkle45_mirrorChase12() {
-  fadeToBlackBy(leds, NUM_LEDS, 10);
+void breatheSync12s() {
+  static float brightness = 0;
+  static int direction = 1;
 
-  // Sparkle random LED in 45-ring
-  int index = RING45_START + random(RING45_COUNT);
-  leds[index] = CHSV(random8(), 200, 255);
+  brightness += 0.02f * direction;
+  if (brightness >= 1.0 || brightness <= 0.1) direction *= -1;
 
-  // Chasing dot mirrored
-  static uint8_t chase = 0;
-  leds[RING12A_START + chase] = CHSV(128, 255, 255);
-  leds[RING12B_START + (RING12_COUNT - 1 - chase)] = CHSV(128, 255, 255);
-  chase = (chase + 1) % RING12_COUNT;
+  uint8_t b = (uint8_t)(brightness * 255);
+  for (int i = 0; i < 12; i++) {
+    strip.setPixelColor(RING_12_1_START + i, lightBlue(b));
+    strip.setPixelColor(RING_12_2_START + i, lightBlue(b));
+  }
+}
+
+void rotatingDot12s() {
+  static int pos = 0;
+  const int tailLength = 3;
+
+  for (int i = 0; i < 12; i++) {
+    strip.setPixelColor(RING_12_1_START + i, 0);
+    strip.setPixelColor(RING_12_2_START + i, 0);
+  }
+
+  for (int t = 0; t < tailLength; t++) {
+    int index1 = (pos - t + 12) % 12;
+    int index2 = (pos - t + 12) % 12;
+    uint8_t brightness = 255 - (t * (255 / tailLength));
+    strip.setPixelColor(RING_12_1_START + index1, lightBlue(brightness));
+    strip.setPixelColor(RING_12_2_START + index2, lightBlue(brightness));
+  }
+
+  pos = (pos + 1) % 12;
 }
