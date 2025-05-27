@@ -1,274 +1,153 @@
 #include <Adafruit_NeoPixel.h>
 
-#define LED_PIN 2
-#define NUM_LEDS 69
+#define LED_PIN 6
+#define NUM_LEDS 45
+#define BRIGHTNESS 100
+#define TAIL_LENGTH 10
+#define COLOR_DELAY 50
 
-#define RING_45_END 44
-#define RING_12_1_START 45
-#define RING_12_2_START 57
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
 
-#define PATTERN_DURATION 120000  // 2 minutes
-
-Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
-
-unsigned long lastPatternChange = 0;
+int currentPixel = 0;
+int fillProgress = 0;
+int breatheBrightness = 0;
+int breatheDirection = 1;
+unsigned long lastUpdate = 0;
 int currentPattern = 0;
-const int totalPatterns = 4;
-
+unsigned long patternStartTime = 0;
+unsigned long patternDuration = 2 * 60 * 1000;  // 2 minutes
 
 void setup() {
   strip.begin();
   strip.show();
+  strip.setBrightness(BRIGHTNESS);
+  patternStartTime = millis();
 }
 
 void loop() {
   unsigned long now = millis();
-  if (now - lastPatternChange > PATTERN_DURATION) {
-    currentPattern = (currentPattern + 1) % totalPatterns;
-    lastPatternChange = now;
+
+  if (now - patternStartTime > patternDuration) {
+    currentPattern = (currentPattern + 1) % 8;  // now 8 patterns
+    patternStartTime = now;
+    currentPixel = 0;
+    fillProgress = 0;
+    breatheBrightness = 0;
+    strip.clear();
+    strip.show();
   }
 
-  switch (currentPattern) {
-    case 0:
-      rotatingDotTail45();
-      rotatingDot12s();
-      break;
-    case 1:
-      sparkleFade45();
-      mirroredWave12s();
-      break;
-    case 2:
-      breatheRing45();
-      breatheSync12s();
-      break;
-    case 3:
-      multiDotRotate45();
-      multiRotatingDot12s();
-      break;
-    case 4:
-      pulseSync12s();
-      breatheRing45();
-      break;
-    case 5:
-      multi2Rotate45();
-      multi2Rotate12s();
-      break;
+  if (now - lastUpdate > COLOR_DELAY) {
+    lastUpdate = now;
+    switch (currentPattern) {
+      case 0: pattern_chaseForward(); break;
+      case 1: pattern_chaseBackward(); break;
+      case 2: pattern_bounce(); break;
+      case 3: pattern_dualOpposite(); break;
+      case 4: pattern_quadChase(); break;
+      case 5: pattern_breathe(); break;
+      case 6: pattern_fillMirror(); break;
+      case 7: pattern_loadingWheel(); break;
+    }
   }
+}
 
-
+void pattern_chaseForward() {
+  strip.clear();
+  for (int i = 0; i < TAIL_LENGTH; i++) {
+    int pixel = (currentPixel - i + NUM_LEDS) % NUM_LEDS;
+    int brightness = map(TAIL_LENGTH - i, 0, TAIL_LENGTH, 0, BRIGHTNESS);
+    strip.setPixelColor(pixel, 0, 0, brightness);
+  }
   strip.show();
-  delay(20);
+  currentPixel = (currentPixel + 1) % NUM_LEDS;
 }
 
-// ------------ Core color ---------------
-uint32_t lightBlue(uint8_t brightness) {
-  return strip.Color(0, (brightness * 100) / 255, brightness);
-}
-
-// ------------ 45 LED Ring Patterns ------------
-
-void rotatingDotTail45() {
-  static int pos = 0;
-  const int tailLength = 6;
-
-  for (int i = 0; i <= RING_45_END; i++) {
-    int distance = (i - pos + NUM_LEDS) % (RING_45_END + 1);
-    if (distance < tailLength) {
-      uint8_t brightness = 255 - (distance * (255 / tailLength));
-      strip.setPixelColor(i, lightBlue(brightness));
-    } else {
-      strip.setPixelColor(i, 0);
-    }
+void pattern_chaseBackward() {
+  strip.clear();
+  for (int i = 0; i < TAIL_LENGTH; i++) {
+    int pixel = (currentPixel + i) % NUM_LEDS;
+    int brightness = map(TAIL_LENGTH - i, 0, TAIL_LENGTH, 0, BRIGHTNESS);
+    strip.setPixelColor(pixel, 0, 0, brightness);
   }
-
-  pos = (pos + 1) % (RING_45_END + 1);
+  strip.show();
+  currentPixel = (currentPixel - 1 + NUM_LEDS) % NUM_LEDS;
 }
 
-void sparkleFade45() {
-  for (int i = 0; i <= RING_45_END; i++) {
-    uint8_t brightness = (random(15) == 0) ? 255 : random(10);
-    strip.setPixelColor(i, lightBlue(brightness));
-  }
-}
-
-void breatheRing45() {
-  static float brightness = 0;
+void pattern_bounce() {
   static int direction = 1;
-
-  brightness += 0.02f * direction;
-  if (brightness >= 1.0 || brightness <= 0.1) direction *= -1;
-
-  uint8_t b = (uint8_t)(brightness * 255);
-  for (int i = 0; i <= RING_45_END; i++) {
-    strip.setPixelColor(i, lightBlue(b));
+  strip.clear();
+  for (int i = 0; i < TAIL_LENGTH; i++) {
+    int pixel = currentPixel - (i * direction);
+    if (pixel < 0) pixel += NUM_LEDS;
+    if (pixel >= NUM_LEDS) pixel -= NUM_LEDS;
+    int brightness = map(TAIL_LENGTH - i, 0, TAIL_LENGTH, 0, BRIGHTNESS);
+    strip.setPixelColor(pixel, 0, 0, brightness);
   }
+  strip.show();
+  currentPixel += direction;
+  if (currentPixel >= NUM_LEDS - 1 || currentPixel <= 0) direction = -direction;
 }
 
-void multiDotRotate45() {
-  static int pos = 0;
-  const int tailLength = 6;
-  const int spacing = 11;  // ~90° spacing on 45 LEDs
-
-  int dots[] = {
-    pos,
-    (pos + spacing) % 45,
-    (pos + 2 * spacing) % 45,
-    (pos + 3 * spacing) % 45
-  };
-
-  for (int i = 0; i <= RING_45_END; i++) {
-    strip.setPixelColor(i, 0);  // Clear
+void pattern_dualOpposite() {
+  strip.clear();
+  for (int i = 0; i < TAIL_LENGTH; i++) {
+    int pos1 = (currentPixel - i + NUM_LEDS) % NUM_LEDS;
+    int pos2 = (pos1 + NUM_LEDS / 2) % NUM_LEDS;
+    int brightness = map(TAIL_LENGTH - i, 0, TAIL_LENGTH, 0, BRIGHTNESS);
+    strip.setPixelColor(pos1, 0, 0, brightness);
+    strip.setPixelColor(pos2, 0, 0, brightness);
   }
+  strip.show();
+  currentPixel = (currentPixel + 1) % NUM_LEDS;
+}
 
-  for (int d = 0; d < 4; d++) {
-    for (int t = 0; t < tailLength; t++) {
-      int index = (dots[d] - t + 45) % 45;
-      uint8_t brightness = 255 - (t * (255 / tailLength));
-      strip.setPixelColor(index, lightBlue(brightness));
+void pattern_quadChase() {
+  strip.clear();
+  for (int i = 0; i < TAIL_LENGTH; i++) {
+    int offset = (currentPixel - i + NUM_LEDS) % NUM_LEDS;
+    int brightness = map(TAIL_LENGTH - i, 0, TAIL_LENGTH, 0, BRIGHTNESS);
+    for (int j = 0; j < 4; j++) {
+      int start = (j * NUM_LEDS) / 4;
+      int pixel = (start + offset) % NUM_LEDS;
+      strip.setPixelColor(pixel, 0, 0, brightness);
     }
   }
-
-  pos = (pos + 1) % 45;
+  strip.show();
+  currentPixel = (currentPixel + 1) % (NUM_LEDS / 4);  // sync speed
 }
 
-void multi2Rotate45() {
-  static int pos = 0;
-  const int tailLength = 6;
-  const int spacing = 22;  // ~180° spacing on 45 LEDs
-
-  int dots[] = {
-    pos,
-    (pos + spacing) % 45,
-  };
-
-  for (int i = 0; i <= RING_45_END; i++) {
-    strip.setPixelColor(i, 0);  // Clear
+void pattern_breathe() {
+  breatheBrightness += breatheDirection * 5;
+  if (breatheBrightness >= BRIGHTNESS || breatheBrightness <= 0) {
+    breatheDirection *= -1;
   }
-
-  for (int d = 0; d < 4; d++) {
-    for (int t = 0; t < tailLength; t++) {
-      int index = (dots[d] - t + 45) % 45;
-      uint8_t brightness = 255 - (t * (255 / tailLength));
-      strip.setPixelColor(index, lightBlue(brightness));
-    }
+  for (int i = 0; i < NUM_LEDS; i++) {
+    strip.setPixelColor(i, 0, 0, breatheBrightness);
   }
-
-  pos = (pos + 1) % 45;
-}
-// ------------ 12 LED Rings ------------
-
-void pulseSync12s() {
-  static float brightness = 0;
-  static int direction = 1;
-
-  brightness += 0.03f * direction;
-  if (brightness >= 1.0 || brightness <= 0.2) direction *= -1;
-
-  uint8_t b = (uint8_t)(brightness * 255);
-  for (int i = 0; i < 12; i++) {
-    strip.setPixelColor(RING_12_1_START + i, lightBlue(b));
-    strip.setPixelColor(RING_12_2_START + i, lightBlue(b));
-  }
+  strip.show();
 }
 
-void mirroredWave12s() {
-  static int wavePos = 0;
-  const float speed = 0.5;
-
-  for (int i = 0; i < 12; i++) {
-    int phase = (int)(128 + 127 * sin((i + wavePos) * speed));
-    uint8_t b = (uint8_t)((phase * 255) / 255);
-    strip.setPixelColor(RING_12_1_START + i, lightBlue(b));
-    strip.setPixelColor(RING_12_2_START + (11 - i), lightBlue(b));
+void pattern_fillMirror() {
+  strip.clear();
+  int mid = NUM_LEDS / 2;
+  for (int i = 0; i <= fillProgress; i++) {
+    int left = (mid - i + NUM_LEDS) % NUM_LEDS;
+    int right = (mid + i) % NUM_LEDS;
+    strip.setPixelColor(left, 0, 0, BRIGHTNESS);
+    strip.setPixelColor(right, 0, 0, BRIGHTNESS);
   }
-
-  wavePos++;
+  strip.show();
+  fillProgress++;
+  if (fillProgress > mid) fillProgress = 0;
 }
 
-void breatheSync12s() {
-  static float brightness = 0;
-  static int direction = 1;
-
-  brightness += 0.02f * direction;
-  if (brightness >= 1.0 || brightness <= 0.1) direction *= -1;
-
-  uint8_t b = (uint8_t)(brightness * 255);
-  for (int i = 0; i < 12; i++) {
-    strip.setPixelColor(RING_12_1_START + i, lightBlue(b));
-    strip.setPixelColor(RING_12_2_START + i, lightBlue(b));
+void pattern_loadingWheel() {
+  strip.setPixelColor(currentPixel, 0, 0, BRIGHTNESS);
+  strip.show();
+  currentPixel++;
+  if (currentPixel >= NUM_LEDS) {
+    currentPixel = 0;
+    strip.clear();  // Reset for next cycle
   }
-}
-
-void rotatingDot12s() {
-  static int pos = 0;
-  const int tailLength = 3;
-
-  for (int i = 0; i < 12; i++) {
-    strip.setPixelColor(RING_12_1_START + i, 0);
-    strip.setPixelColor(RING_12_2_START + i, 0);
-  }
-
-  for (int t = 0; t < tailLength; t++) {
-    int index1 = (pos - t + 12) % 12;
-    int index2 = (pos - t + 12) % 12;
-    uint8_t brightness = 255 - (t * (255 / tailLength));
-    strip.setPixelColor(RING_12_1_START + index1, lightBlue(brightness));
-    strip.setPixelColor(RING_12_2_START + index2, lightBlue(brightness));
-  }
-
-  pos = (pos + 1) % 12;
-}
-
-void multi2Rotate12s() {
-  static int pos = 0;
-  const int tailLength = 3;
-  const int spacing = 6;  // ~180° spacing on 12 LEDs
-
-  int dots[] = {
-    pos,
-    (pos + spacing) % 45,
-  };
-
-  for (int i = 0; i < 12; i++) {
-    strip.setPixelColor(RING_12_1_START + i, 0);
-    strip.setPixelColor(RING_12_2_START + i, 0);
-  }
-
-  for (int d = 0; d < 4; d++) {
-    for (int t = 0; t < tailLength; t++) {
-      int index = (dots[d] - t + 45) % 45;
-      uint8_t brightness = 255 - (t * (255 / tailLength));
-      strip.setPixelColor(index, lightBlue(brightness));
-    }
-  }
-
-  pos = (pos + 1) % 45;
-}
-
-void multiRotatingDot12s() {
-  static int pos = 0;
-  const int tailLength = 1;
-  const int spacing = 3;  // ~90° spacing on 12 LEDs
-
-  int dots[] = {
-    pos,
-    (pos + spacing) % 45,
-    (pos + 2 * spacing) % 45,
-    (pos + 3 * spacing) % 45
-  };
-
-  for (int i = 0; i < 12; i++) {
-    strip.setPixelColor(RING_12_1_START + i, 0);
-    strip.setPixelColor(RING_12_2_START + i, 0);
-  }
-
-  for (int d = 0; d < 4; d++) {
-    for (int t = 0; t < tailLength; t++) {
-      int index = (dots[d] - t + 12) % 12;
-      uint8_t brightness = 255 - (t * (255 / tailLength));
-      strip.setPixelColor(index, lightBlue(brightness));
-    }
-  }
-
-  pos = (pos + 1) % 45;
 }
